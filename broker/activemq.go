@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	logger "sms_gateway/logger"
+
 	"github.com/go-stomp/stomp"
 	"github.com/magiconair/properties"
 )
@@ -20,7 +22,7 @@ type activemqConfig struct {
 type activemq struct {
 	conn   *stomp.Conn
 	config activemqConfig
-	logger *logger.logger
+	logger *logger.FileLogger
 }
 
 // NewMessageBroker creates a new instance of MessageBroker.
@@ -38,6 +40,7 @@ func NewMessageBroker(brokerURL string, username string, password string, heartb
 	return &activemq{
 		conn:   nil,
 		config: activemqConfig,
+		logger: logger.GetLumberJack(),
 	}
 }
 
