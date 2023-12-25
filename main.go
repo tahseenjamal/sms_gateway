@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sms_gateway/consumer"
+	consumer "sms_gateway/logger"
 )
 
 func main() {
