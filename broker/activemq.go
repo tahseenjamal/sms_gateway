@@ -55,7 +55,7 @@ func NewMessageBroker() *activemq {
 }
 
 // Connect connects to the message broker.
-func (mb *activemq) Connect() {
+func (mb *activemq) Connect() error {
 	if mb.conn != nil {
 		return fmt.Errorf("already connected")
 	}
@@ -68,7 +68,8 @@ func (mb *activemq) Connect() {
 	defer mutex.Unlock()
 
 	if mb.conn != nil {
-		fmt.Errorf("already connected")
+		return fmt.Errorf("already connected")
+
 	}
 
 	for {
@@ -76,7 +77,7 @@ func (mb *activemq) Connect() {
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
 		if err != nil {
 
-			return err
+			fmt.Println("already connected")
 		} else {
 
 			mb.conn = conn
@@ -84,6 +85,8 @@ func (mb *activemq) Connect() {
 		}
 
 	}
+
+	return nil
 
 }
 
@@ -129,6 +132,8 @@ func (mb *activemq) Subscribe(destination string) {
 
 		if err != nil {
 			fmt.Println("Error subscribing to destination: ", destination)
+			mb.Connect()
+
 		} else {
 
 			break
