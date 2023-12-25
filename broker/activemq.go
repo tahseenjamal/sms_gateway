@@ -2,6 +2,7 @@ package broker
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	logger "sms_gateway/logger"
@@ -9,6 +10,9 @@ import (
 	"github.com/go-stomp/stomp"
 	"github.com/magiconair/properties"
 )
+
+// Mutex for synchronizing access to the connection.
+var mutex = &sync.Mutex{}
 
 type activemqConfig struct {
 	brokerURL      string
@@ -23,19 +27,25 @@ type activemq struct {
 	conn   *stomp.Conn
 	config activemqConfig
 	logger *logger.FileLogger
+	subs   *stomp.Subscription
+}
+
+func getConfig() activemqConfig {
+
+	prop := properties.MustLoadFile("main.properties", properties.UTF8)
+	brokerURL := prop.GetString("activemq.broker.url", "localhost:61613")
+	username := prop.GetString("activemq.broker.username", "admin")
+	password := prop.GetString("activemq.broker.password", "admin")
+	heartbeat := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 10))
+	heartbeatGrace := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 10))
+
+	return activemqConfig{brokerURL, username, password, heartbeat, heartbeatGrace}
 }
 
 // NewMessageBroker creates a new instance of MessageBroker.
-func NewMessageBroker(brokerURL string, username string, password string, heartbeat, heartbeatGrace time.Duration) *MessageBroker {
+func NewMessageBroker() *activemq {
 
-	prop := properties.MustLoadFile("main.properties", properties.UTF8)
-	brokerURL = prop.GetString("activemq.broker.url", "localhost:61613")
-	username = prop.GetString("activemq.broker.username", "admin")
-	password = prop.GetString("activemq.broker.password", "admin")
-	heartbeat = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 10))
-	heartbeatGrace = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 10))
-
-	activemqConfig := activemqConfig{brokerURL, username, password, heartbeat, heartbeatGrace}
+	activemqConfig := getConfig()
 
 	return &activemq{
 		conn:   nil,
@@ -45,7 +55,7 @@ func NewMessageBroker(brokerURL string, username string, password string, heartb
 }
 
 // Connect connects to the message broker.
-func (mb *activemq) Connect() error {
+func (mb *activemq) Connect() {
 	if mb.conn != nil {
 		return fmt.Errorf("already connected")
 	}
@@ -54,18 +64,31 @@ func (mb *activemq) Connect() error {
 		stomp.ConnOpt.HeartBeat(mb.config.heartbeat, mb.config.heartbeatGrace),
 	}
 
-	conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
-	if err != nil {
+	mutex.Lock()
+	defer mutex.Unlock()
 
-		return err
+	if mb.conn != nil {
+		fmt.Errorf("already connected")
 	}
 
-	mb.conn = conn
-	return nil
+	for {
+
+		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
+		if err != nil {
+
+			return err
+		} else {
+
+			mb.conn = conn
+			break
+		}
+
+	}
+
 }
 
 // Disconnect disconnects from the message broker.
-func (mb *MessageBroker) Disconnect() error {
+func (mb *activemq) Disconnect() error {
 	if mb.conn == nil {
 		return fmt.Errorf("not connected")
 	}
@@ -93,17 +116,22 @@ func (mb *activemq) Send(destination, body string) error {
 }
 
 // Subscribes to messages from a specified destination.
-func (mb *activemq) Subscribe(destination string, logger *logger) (*stomp.Subscription, error) {
+func (mb *activemq) Subscribe(destination string) {
 
-	if mb.conn == nil {
-		return nil, fmt.Errorf("not connected to queue: %s ", destination)
+	for {
+
+		if mb.conn == nil {
+			mb.Connect()
+		}
+
+		var err error
+		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
+
+		if err != nil {
+			fmt.Println("Error subscribing to destination: ", destination)
+		} else {
+
+			break
+		}
 	}
-
-	sub, err := mb.conn.Subscribe(destination, stomp.AckAuto)
-	if err != nil {
-		return nil, err
-	}
-
-	return sub, err
-
 }
