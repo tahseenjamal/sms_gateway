@@ -1,0 +1,406 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/fiorix/go-smpp/smpp"
+	"github.com/fiorix/go-smpp/smpp/encoding"
+	"github.com/fiorix/go-smpp/smpp/pdu"
+	"github.com/fiorix/go-smpp/smpp/pdu/pdufield"
+	"github.com/fiorix/go-smpp/smpp/pdu/pdutext"
+	"github.com/go-stomp/stomp"
+	"github.com/magiconair/properties"
+	"github.com/natefinch/lumberjack"
+	"golang.org/x/time/rate"
+)
+
+type packet struct {
+	queue   string
+	message string
+}
+
+var (
+	consumerLogger *log.Logger
+
+	// Stomp initialization
+	stomp_ip_port    string
+	sendStompConn    *stomp.Conn
+	receiveStompConn *stomp.Conn
+
+	subscriber *stomp.Subscription
+
+	consumer_queue string
+	logstash_queue string
+	logger_queue   string
+	brokerQueue    chan packet
+
+	tranceiver   *smpp.Transceiver
+	conn         <-chan smpp.ConnStatus
+	status       string
+	rate_limiter *rate.Limiter
+
+	loggingQueue chan string
+
+	prop *properties.Properties
+
+	startTime time.Time
+	endTime   time.Time
+
+	re *regexp.Regexp
+
+	//threads of submission
+	threads int
+)
+
+func extract(message string) (map[string]string, error) {
+
+	matches := re.FindStringSubmatch(message)
+
+	var resultMap = make(map[string]string)
+
+	if len(matches) > 0 {
+		keys := []string{"id", "sub", "dlvrd", "submit_date", "done_date", "stat", "err", "text"}
+
+		for i, key := range keys {
+			resultMap[key] = matches[i+1]
+		}
+
+		return resultMap, nil
+	}
+
+	return nil, fmt.Errorf("invalid data length")
+
+}
+
+func getLumberJack(filename string, maxsize int, maxbackup int, maxage int, compress bool) {
+	consumerLogger = log.Default()
+	consumerLogger.SetOutput(&lumberjack.Logger{
+		Filename:   filename,
+		MaxSize:    maxsize,
+		MaxBackups: maxbackup,
+		MaxAge:     maxage,
+		Compress:   compress,
+	})
+}
+
+func splitString(input string, delimiter string) (int, int) {
+	// Receive a hour minute string separated by :
+	// Split and return
+	parts := strings.Split(input, delimiter)
+	h, _ := strconv.Atoi(parts[0])
+	m, _ := strconv.Atoi(parts[1])
+	return h, m
+}
+
+func globalVariableInitialization() {
+	hostname, _ := os.Hostname()
+	prop = properties.MustLoadFile("consumer.properties", properties.UTF8)
+	stomp_ip_port = prop.GetString("stomp", "localhost:61613")
+	consumer_queue = prop.GetString("consumer_queue", fmt.Sprintf("%s/http_calls", hostname))
+	logstash_queue = prop.GetString("logstash_queue", fmt.Sprintf("%s/logstash", hostname))
+	logger_queue = prop.GetString("logger_queue", fmt.Sprintf("%s/logger", hostname))
+	threads = prop.GetInt("threads", 10)
+
+	morningHour, morningMinute := splitString(prop.GetString("morning", "9:00"), ":")
+	eveningHour, eveningMinute := splitString(prop.GetString("evening", "20:00"), ":")
+
+	loggingQueue = make(chan string, 1000000)
+	brokerQueue = make(chan packet, 100)
+
+	// start and end time basis black hour, messages outside this time would be dropped
+	currentTime := time.Now()
+	startTime = time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), morningHour, morningMinute, 0, 0, currentTime.Location())
+	endTime = time.Date(currentTime.Year(), currentTime.Month(), currentTime.Day(), eveningHour, eveningMinute, 0, 0, currentTime.Location())
+
+	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("tps", 50))*time.Millisecond), 1)
+
+}
+
+func blackHour() bool {
+
+	return time.Now().Before(startTime) || time.Now().After(endTime)
+}
+
+// Passes a new stomp connection
+func getStompSession() *stomp.Conn {
+
+	for {
+
+		// ActiveMQ broker details
+		// Create connection with Reconnect option and HeartBeatGracePeriodMultiplier
+		conn_local, err := stomp.Dial("tcp", stomp_ip_port,
+			// stomp.ConnOpt.Login(username, password),
+			stomp.ConnOpt.Login("admin", "admin"),
+			stomp.ConnOpt.AcceptVersion(stomp.V12),
+			stomp.ConnOpt.HeartBeat(5*time.Second, 5*time.Second), // Set the initial heartbeats
+			stomp.ConnOpt.HeartBeatGracePeriodMultiplier(5),       // Set HeartBeatGracePeriodMultiplier
+		)
+
+		if err != nil {
+			consumerLogger.Printf("|ERROR|%s\n", err)
+			time.Sleep(5 * time.Second)
+		} else {
+			consumerLogger.Printf("|INFO|Connected to Stomp\n")
+			return conn_local
+		}
+
+	}
+
+}
+
+// Does subscription using the passed connection and returns the subscription handler
+func stomp_subscribe(conn *stomp.Conn, queueName string) (*stomp.Subscription, error) {
+
+	sub, err := conn.Subscribe(queueName, stomp.AckAuto)
+	if err != nil {
+		consumerLogger.Printf("|ERROR|%s\n", err)
+		return nil, err
+	}
+	consumerLogger.Printf("|INFO|Subscribed to: %s\n", consumer_queue)
+	return sub, nil
+}
+
+func reconnectReceiver() {
+	subscriber.Unsubscribe()
+	receiveStompConn.Disconnect()
+	receiveStompConn = getStompSession()
+	subscriber, _ = stomp_subscribe(receiveStompConn, consumer_queue)
+}
+
+func smppBinding() {
+	tranceiver = &smpp.Transceiver{
+		Addr:               prop.GetString("ip_port", ""),
+		User:               prop.GetString("systemid", ""),
+		Passwd:             prop.GetString("password", ""),
+		SystemType:         prop.GetString("systemtype", ""),
+		EnquireLink:        5 * time.Minute,
+		EnquireLinkTimeout: 10 * time.Second,
+		RespTimeout:        2 * time.Second,
+		BindInterval:       10 * time.Second,
+		Handler:            smppCallbackFunction,
+		RateLimiter:        rate_limiter,
+		WindowSize:         prop.GetUint("window", 20),
+	}
+
+	// Gets an instance of binding status channel
+	conn = tranceiver.Bind()
+
+	// spawns a thread, which continually reads from the above conn
+	// to check the status of the binding
+	go func() {
+		for conn_instance := range conn {
+			log.Println("SMPP connection status:", conn_instance.Status())
+			loggingQueue <- fmt.Sprintf("|SMPP|%s", conn_instance.Status())
+			status = conn_instance.Status().String()
+		}
+	}()
+
+	// Don't proceed ahead until SMPP is connected and initialised
+	for status != "Connected" {
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func sendMessage() {
+
+	for {
+
+		data := <-brokerQueue
+
+		//Destination queue
+		desQueue := data.queue
+		//Message for that destination queue
+		message := data.message
+
+		var err error
+
+		// Will break out of this loop on successful connection and
+		// message delivery. So messages are not lost
+		for {
+
+			err = sendStompConn.Send(desQueue,
+				"text/plain",
+				[]byte(message),
+				stomp.SendOpt.Receipt,
+				stomp.SendOpt.Header("persistent", prop.GetString("persist", "true")),
+			)
+			if err != nil {
+				consumerLogger.Printf("|ERROR|%s|%s|%d\n", desQueue, err, len(brokerQueue))
+				// this would block more request in the chain
+				sendStompConn = getStompSession()
+			} else {
+				break
+			}
+		}
+	}
+}
+
+func smppCallbackFunction(p pdu.Body) {
+	switch p.Header().ID {
+	case pdu.DeliverSMID:
+		f := p.Fields()
+		dst := f[pdufield.SourceAddr]
+		src := f[pdufield.DestinationAddr]
+		text := f[pdufield.ShortMessage].String()
+		dlr, _ := extract(text)
+
+		loggingQueue <- fmt.Sprintf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", src, dst, dlr["stat"], dlr["text"], dlr["id"])
+	}
+
+}
+
+func smpp_delivery() {
+
+	var msg *stomp.Message
+	var err error
+
+	for {
+
+		// Loop and existing only when able to pull from the message broker
+		for {
+			msg, err = subscriber.Read()
+			if err == nil {
+				break
+			}
+			consumerLogger.Printf("|ERROR|Subscriber disconnected|%s\n", err)
+			time.Sleep(5 * time.Second)
+			reconnectReceiver()
+		}
+		q, _ := url.ParseQuery(string(msg.Body))
+		sender := q.Get("sender")
+		dest := q.Get("dest")
+		message := q.Get("message")
+		test := q.Get("test")
+
+		// if not a test message and not in black hour only then submit
+		if test != "true" && !blackHour() {
+
+			var submitErr error
+
+			// Either the message is greater than 160 characters or it contains non GSM7 characters
+			if len(encoding.ValidateGSM7String(message)) > 0 || len(message) > 160 {
+
+				pduMessage := pdutext.UCS2(message)
+				sml, err := tranceiver.SubmitLongMsg(&smpp.ShortMessage{
+					Src:           sender,
+					Dst:           dest,
+					Text:          pduMessage,
+					Register:      pdufield.FinalDeliveryReceipt,
+					SourceAddrTON: uint8(prop.GetUint("src_ton", 5)),
+					SourceAddrNPI: uint8(prop.GetUint("src_npi", 1)),
+					DestAddrTON:   uint8(prop.GetUint("dst_ton", 1)),
+					DestAddrNPI:   uint8(prop.GetUint("dst_npi", 1)),
+					ESMClass:      8,
+				})
+
+				if err == nil {
+
+					// Long message submit response would be an array of smpp.ShortMessage
+					for _, sm := range sml {
+
+						loggingQueue <- fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+					}
+
+				} else {
+					submitErr = err
+				}
+
+			} else {
+
+				pduMessage := pdutext.Raw(message)
+				sm, err := tranceiver.Submit(&smpp.ShortMessage{
+					Src:           sender,
+					Dst:           dest,
+					Text:          pduMessage,
+					Register:      pdufield.FinalDeliveryReceipt,
+					SourceAddrTON: uint8(prop.GetUint("src_ton", 5)),
+					SourceAddrNPI: uint8(prop.GetUint("src_npi", 1)),
+					DestAddrTON:   uint8(prop.GetUint("dst_ton", 1)),
+					DestAddrNPI:   uint8(prop.GetUint("dst_npi", 1)),
+				})
+
+				if err == nil {
+
+					loggingQueue <- fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+				} else {
+					submitErr = err
+				}
+			}
+
+			if submitErr != nil {
+				// Log error into logging queue, which would be routed to File Logger and Logstash -> Elastic
+				loggingQueue <- fmt.Sprintf("|FAILED|%s|%s|%s", sender, dest, submitErr.Error())
+
+				// To avoid losing the message that hasn't been submitted, we push the message back in the
+				// consumer queue from where it would be picked up later
+				// This can also be changed to loop endlessly to resubmit
+				brokerQueue <- packet{consumer_queue, string(msg.Body)}
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}
+}
+
+func Producer() {
+	for {
+
+		// from all over producer data is pushed into the queue channel
+		message := <-loggingQueue
+
+		brokerQueue <- packet{logger_queue, message}
+		brokerQueue <- packet{logstash_queue, message}
+
+	}
+}
+
+func init() {
+
+	pattern := `id:(\w+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(?i)(.+)`
+	re = regexp.MustCompile(pattern)
+
+	globalVariableInitialization()
+	getLumberJack("consumer.log", 1024, 30, 30, true)
+	receiveStompConn = getStompSession()
+	sendStompConn = getStompSession()
+	subscriber, _ = stomp_subscribe(receiveStompConn, consumer_queue)
+	go sendMessage()
+	smppBinding()
+
+}
+
+func blackHourNotification() {
+	for {
+		// Is it a black hour
+		if blackHour() {
+
+			// If yes, then sleep for 1 minute
+			message := "|BLACK_HOUR|Campaign Messages in queue would be dropped"
+			brokerQueue <- packet{logger_queue, message}
+			time.Sleep(1 * time.Minute)
+		}
+	}
+}
+func main() {
+
+	go blackHourNotification()
+	go Producer()
+
+	fmt.Printf("Starting %d thread(s)", threads)
+
+	for i := 0; i < threads; i++ {
+
+		// Each smpp delivery should have its own producer
+		go smpp_delivery()
+	}
+	// block operations, can even run http server and have controllers for information
+	quit := make(chan bool)
+	<-quit
+
+}
