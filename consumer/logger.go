@@ -28,7 +28,7 @@ type loggerproperties struct {
 // Fetch properties from the properties file
 func getFetchProperties() loggerproperties {
 
-	prop := properties.MustLoadFile("consumer.properties", properties.UTF8)
+	prop := properties.MustLoadFile("consumer/consumer.properties", properties.UTF8)
 
 	return loggerproperties{
 		filename:  prop.GetString("consumer.log.filename", "consumer.log"),
