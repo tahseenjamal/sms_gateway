@@ -60,7 +60,7 @@ func GetLumberJack() logger {
 	return fileLogger
 }
 
-func (l *logger) writeLog(data string) {
+func (l *logger) WriteLog(data string) {
 
 	l.ConsumerLogger.Printf("Message received: %s", data)
 

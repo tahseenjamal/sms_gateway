@@ -11,6 +11,6 @@ func main() {
 
 	logger.ConsumerLogger.Println("Hello World!")
 
-	logger.writeLog("Hello World!")
+	logger.consumer.WriteLog("Hello World!")
 
 }
