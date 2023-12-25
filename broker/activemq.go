@@ -14,6 +14,7 @@ import (
 // Mutex for synchronizing access to the connection.
 var mutex = &sync.Mutex{}
 
+// activemqConfig object for storing the configuration of the message broker.
 type activemqConfig struct {
 	brokerURL      string
 	username       string
@@ -22,7 +23,7 @@ type activemqConfig struct {
 	heartbeatGrace time.Duration
 }
 
-// MessageBroker represents a simple message broker using the STOMP protocol.
+// activemq object for connecting to the message broker.
 type activemq struct {
 	conn   *stomp.Conn
 	config activemqConfig
