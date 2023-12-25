@@ -132,8 +132,6 @@ func (mb *activemq) Subscribe(destination string) {
 
 		if err != nil {
 			fmt.Println("Error subscribing to destination: ", destination)
-			mb.Connect()
-
 		} else {
 
 			break
