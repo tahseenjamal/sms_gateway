@@ -2,14 +2,14 @@ package broker
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/go-stomp/stomp"
+	"github.com/magiconair/properties"
 )
 
 // MessageBroker represents a simple message broker using the STOMP protocol.
-type MessageBroker struct {
+type activemq struct {
 	conn           *stomp.Conn
 	brokerURL      string
 	username       string
@@ -18,18 +18,17 @@ type MessageBroker struct {
 	heartbeatGrace time.Duration
 }
 
-type MessageBrokerFunctions interface {
-	Connect() error
-	Disconnect() error
-	Send(string, string) error
-	Subscribe(string, func(*stomp.Message)) error
-}
-
 // NewMessageBroker creates a new instance of MessageBroker.
 func NewMessageBroker(brokerURL string, username string, password string, heartbeat, heartbeatGrace time.Duration) *MessageBroker {
 
-	return &MessageBroker{
-		conn:           nil,
+	prop := properties.MustLoadFile("main.properties", properties.UTF8)
+	brokerURL = prop.GetString("activemq.broker.url", "localhost:61613")
+	username = prop.GetString("activemq.broker.username", "admin")
+	password = prop.GetString("activemq.broker.password", "admin")
+	heartbeat = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 10))
+	heartbeatGrace = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 10))
+
+	return &activemq{
 		brokerURL:      brokerURL,
 		username:       username,
 		password:       password,
@@ -39,7 +38,7 @@ func NewMessageBroker(brokerURL string, username string, password string, heartb
 }
 
 // Connect connects to the message broker.
-func (mb *MessageBroker) Connect() error {
+func (mb *activemq) Connect() error {
 	if mb.conn != nil {
 		return fmt.Errorf("already connected")
 	}
@@ -73,8 +72,8 @@ func (mb *MessageBroker) Disconnect() error {
 	return nil
 }
 
-// Send sends a message to a specified destination.
-func (mb *MessageBroker) Send(destination, body string) error {
+// Sends a message to a specified destination.
+func (mb *activemq) Send(destination, body string) error {
 	if mb.conn == nil {
 		return fmt.Errorf("not connected")
 	}
@@ -86,8 +85,8 @@ func (mb *MessageBroker) Send(destination, body string) error {
 	return nil
 }
 
-// Subscribe subscribes to messages from a specified destination.
-func (mb *MessageBroker) Subscribe(destination string, callback func(*stomp.Message)) error {
+// Subscribes to messages from a specified destination.
+func (mb *activemq) Subscribe(destination string, logger *logger) (*stomp.Subscription, error) {
 
 	if mb.conn == nil {
 		return fmt.Errorf("not connected to queue: %s ", destination)
@@ -98,16 +97,6 @@ func (mb *MessageBroker) Subscribe(destination string, callback func(*stomp.Mess
 		return err
 	}
 
-	go func() {
-		for {
-			msg, err := sub.Read()
-			if err != nil {
-				log.Fatalf("error reading from : %s, %s", destination, err.Error())
-			}
-			callback(msg)
-		}
-	}()
-
-	return nil
+	return sub, err
 
 }

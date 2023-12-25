@@ -10,7 +10,7 @@ import (
 // ConsumerLogger represents a logger for the consumer package.
 type logger struct {
 	loggerProperties loggerproperties
-	ConsumerLogger   *log.Logger
+	Logger           *log.Logger
 	loggerQueue      chan string
 }
 
@@ -46,8 +46,8 @@ func GetLumberJack() logger {
 	var fileLogger logger
 	fileLogger.loggerProperties = getFetchProperties()
 
-	fileLogger.ConsumerLogger = log.Default()
-	fileLogger.ConsumerLogger.SetOutput(&lumberjack.Logger{
+	fileLogger.Logger = log.Default()
+	fileLogger.Logger.SetOutput(&lumberjack.Logger{
 		Filename:   fileLogger.loggerProperties.filename,
 		MaxSize:    fileLogger.loggerProperties.maxsize,
 		MaxBackups: fileLogger.loggerProperties.maxbackup,
@@ -63,6 +63,6 @@ func GetLumberJack() logger {
 
 func (l *logger) WriteLog(data string) {
 
-	l.ConsumerLogger.Println(data)
+	l.Logger.Println(data)
 
 }
