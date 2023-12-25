@@ -9,8 +9,6 @@ func main() {
 
 	logger := consumer.GetLumberJack()
 
-	logger.ConsumerLogger.Println("Hello World!")
-
-	logger.consumer.WriteLog("Hello World!")
+	logger.WriteLog("Hello World!")
 
 }
