@@ -8,14 +8,19 @@ import (
 	"github.com/magiconair/properties"
 )
 
-// MessageBroker represents a simple message broker using the STOMP protocol.
-type activemq struct {
-	conn           *stomp.Conn
+type activemqConfig struct {
 	brokerURL      string
 	username       string
 	password       string
 	heartbeat      time.Duration
 	heartbeatGrace time.Duration
+}
+
+// MessageBroker represents a simple message broker using the STOMP protocol.
+type activemq struct {
+	conn   *stomp.Conn
+	config activemqConfig
+	logger *logger.logger
 }
 
 // NewMessageBroker creates a new instance of MessageBroker.
@@ -28,12 +33,11 @@ func NewMessageBroker(brokerURL string, username string, password string, heartb
 	heartbeat = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 10))
 	heartbeatGrace = time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 10))
 
+	activemqConfig := activemqConfig{brokerURL, username, password, heartbeat, heartbeatGrace}
+
 	return &activemq{
-		brokerURL:      brokerURL,
-		username:       username,
-		password:       password,
-		heartbeat:      heartbeat,
-		heartbeatGrace: heartbeatGrace,
+		conn:   nil,
+		config: activemqConfig,
 	}
 }
 
@@ -43,11 +47,11 @@ func (mb *activemq) Connect() error {
 		return fmt.Errorf("already connected")
 	}
 	options := []func(*stomp.Conn) error{
-		stomp.ConnOpt.Login(mb.username, mb.password),
-		stomp.ConnOpt.HeartBeat(mb.heartbeat, mb.heartbeatGrace),
+		stomp.ConnOpt.Login(mb.config.username, mb.config.password),
+		stomp.ConnOpt.HeartBeat(mb.config.heartbeat, mb.config.heartbeatGrace),
 	}
 
-	conn, err := stomp.Dial("tcp", mb.brokerURL, options...)
+	conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
 	if err != nil {
 
 		return err
@@ -89,12 +93,12 @@ func (mb *activemq) Send(destination, body string) error {
 func (mb *activemq) Subscribe(destination string, logger *logger) (*stomp.Subscription, error) {
 
 	if mb.conn == nil {
-		return fmt.Errorf("not connected to queue: %s ", destination)
+		return nil, fmt.Errorf("not connected to queue: %s ", destination)
 	}
 
 	sub, err := mb.conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	return sub, err
