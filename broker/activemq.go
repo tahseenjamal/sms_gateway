@@ -108,12 +108,14 @@ func (mb *activemq) Disconnect() error {
 // Sends a message to a specified destination.
 func (mb *activemq) Send(destination, body string) error {
 	if mb.conn == nil {
-		return fmt.Errorf("not connected")
+		fmt.Println("not connected")
+		mb.Connect()
 	}
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
-		return fmt.Errorf("cannot send to queue: %s ", destination)
+		fmt.Printf("cannot send to queue: %s\n", destination)
+		mb.Connect()
 	}
 	return nil
 }
