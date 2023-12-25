@@ -7,14 +7,7 @@ import (
 	"github.com/natefinch/lumberjack"
 )
 
-// ConsumerLogger represents a logger for the consumer package.
-type logger struct {
-	loggerProperties loggerproperties
-	Logger           *log.Logger
-	loggerQueue      chan string
-}
-
-type loggerproperties struct {
+type configproperties struct {
 
 	// Fetch properties
 	filename  string
@@ -22,16 +15,20 @@ type loggerproperties struct {
 	maxbackup int
 	maxage    int
 	compress  bool
-	queuesize int
+}
+
+type FileLogger struct {
+	configProp configproperties
+	logger     *log.Logger
 }
 
 // Fetch properties from the properties file
-func getFetchProperties() loggerproperties {
+func getFetchProperties() configproperties {
 
 	mainProp := properties.MustLoadFile("main.properties", properties.UTF8)
 	prop := properties.MustLoadFile(mainProp.GetString("consumer.properties.filename", ""), properties.UTF8)
 
-	return loggerproperties{
+	return configproperties{
 		filename:  prop.GetString("consumer.log.filename", "consumer.log"),
 		maxsize:   prop.GetInt("consumer.log.maxsize", 1024),
 		maxbackup: prop.GetInt("consumer.log.maxbackup", 30),
@@ -41,28 +38,25 @@ func getFetchProperties() loggerproperties {
 }
 
 // GetLumberJack returns a new logger for the consumer package.
-func GetLumberJack() logger {
+func GetLumberJack() *FileLogger {
 
-	var fileLogger logger
-	fileLogger.loggerProperties = getFetchProperties()
-
-	fileLogger.Logger = log.Default()
-	fileLogger.Logger.SetOutput(&lumberjack.Logger{
-		Filename:   fileLogger.loggerProperties.filename,
-		MaxSize:    fileLogger.loggerProperties.maxsize,
-		MaxBackups: fileLogger.loggerProperties.maxbackup,
-		MaxAge:     fileLogger.loggerProperties.maxage,
-		Compress:   fileLogger.loggerProperties.compress,
+	var fileLogger *FileLogger
+	prop := getFetchProperties()
+	fileLogger = &FileLogger{configProp: prop, logger: log.Default()}
+	fileLogger.logger.SetOutput(&lumberjack.Logger{
+		Filename:   fileLogger.configProp.filename,
+		MaxSize:    fileLogger.configProp.maxsize,
+		MaxBackups: fileLogger.configProp.maxbackup,
+		MaxAge:     fileLogger.configProp.maxage,
+		Compress:   fileLogger.configProp.compress,
 	})
-
-	fileLogger.loggerQueue = make(chan string, fileLogger.loggerProperties.queuesize)
 
 	// Set the logger for the consumer package
 	return fileLogger
 }
 
-func (l *logger) WriteLog(data string) {
+func (l *FileLogger) WriteLog(data string) {
 
-	l.Logger.Println(data)
+	l.logger.Println(data)
 
 }
