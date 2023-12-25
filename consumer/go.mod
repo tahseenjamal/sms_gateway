@@ -1,4 +1,4 @@
-module organised_sms_gateway
+module consumer
 
 go 1.21.5
 
