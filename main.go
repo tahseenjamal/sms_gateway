@@ -1,12 +1,18 @@
 package main
 
-import "sms_gateway/logger"
+import (
+	"fmt"
+	"sms_gateway/logger"
+)
 
 func main() {
 	// Initialize and start the consumer application
 
-	logger := logger.GetLumberJack()
+	logging := logger.GetLumberJack()
 
-	logger.WriteLog("Hello World!")
+	fmt.Println(logger.GetLumberJack())
+	fmt.Println(logger.GetLumberJack())
+
+	logging.WriteLog("Hello World!")
 
 }

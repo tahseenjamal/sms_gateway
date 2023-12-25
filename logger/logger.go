@@ -22,6 +22,8 @@ type FileLogger struct {
 	logger     *log.Logger
 }
 
+var fileLogger *FileLogger
+
 // Fetch properties from the properties file
 func getFetchProperties() configproperties {
 
@@ -40,7 +42,9 @@ func getFetchProperties() configproperties {
 // GetLumberJack returns a new logger for the consumer package.
 func GetLumberJack() *FileLogger {
 
-	var fileLogger *FileLogger
+	if fileLogger != nil {
+		return fileLogger
+	}
 	prop := getFetchProperties()
 	fileLogger = &FileLogger{configProp: prop, logger: log.Default()}
 	fileLogger.logger.SetOutput(&lumberjack.Logger{
