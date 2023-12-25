@@ -118,7 +118,9 @@ func (mb *activemq) Send(destination, body string) error {
 	return nil
 }
 
-// Subscribes to messages from a specified destination.
+// Subscribe subscribes to a specified destination but before that checks if the connection is alive.
+// If the connection is not alive, it tries to reconnect. If the connection is alive, it subscribes to the destination.
+// if the subscription fails, it tries to reconnect.
 func (mb *activemq) Subscribe(destination string) {
 
 	for {
