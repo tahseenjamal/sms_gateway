@@ -58,7 +58,8 @@ func NewMessageBroker() *activemq {
 // Connect connects to the message broker.
 func (mb *activemq) Connect() error {
 	if mb.conn != nil {
-		return fmt.Errorf("already connected")
+		time.Sleep(5 * time.Second)
+		return fmt.Errorf("inside connection: already connected")
 	}
 	options := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mb.config.username, mb.config.password),
@@ -69,15 +70,16 @@ func (mb *activemq) Connect() error {
 	defer mutex.Unlock()
 
 	if mb.conn != nil {
-		return fmt.Errorf("already connected")
+		time.Sleep(5 * time.Second)
+		return fmt.Errorf("second check inside connection: already connected")
 
 	}
 
+	fmt.Println("attempting to connect...")
 	for {
 
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
-		if err != nil {
-
+		if err == nil {
 			fmt.Println("already connected")
 		} else {
 
@@ -127,8 +129,12 @@ func (mb *activemq) Subscribe(destination string) {
 	for {
 
 		if mb.conn == nil {
+			time.Sleep(5 * time.Second)
+			fmt.Println("not connected: inside subscribe")
 			mb.Connect()
 		}
+		time.Sleep(5 * time.Second)
+		fmt.Println("connected: inside subscribe")
 
 		var err error
 		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
@@ -150,9 +156,8 @@ func (mb *activemq) Read(destination string) *stomp.Message {
 		mb.Connect()
 		mb.Subscribe(destination)
 
-	} else {
-
-		return messge
 	}
+
+	return messge
 
 }
