@@ -141,3 +141,18 @@ func (mb *activemq) Subscribe(destination string) {
 		}
 	}
 }
+
+func (mb *activemq) Read(destination string) *stomp.Message {
+
+	messge, err := mb.subs.Read()
+	if err != nil {
+		fmt.Println("Error reading message: ", err)
+		mb.Connect()
+		mb.Subscribe(destination)
+
+	} else {
+
+		return messge
+	}
+
+}
