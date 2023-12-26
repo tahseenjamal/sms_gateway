@@ -48,11 +48,15 @@ func NewMessageBroker() *activemq {
 
 	activemqConfig := getConfig()
 
-	return &activemq{
+	connection := &activemq{
 		conn:   nil,
 		config: activemqConfig,
 		logger: logger.GetLumberJack(),
 	}
+
+	connection.Connect()
+	return connection
+
 }
 
 // Connect connects to the message broker.
@@ -75,37 +79,21 @@ func (mb *activemq) Connect() error {
 
 	}
 
-	fmt.Println("attempting to connect...")
 	for {
 
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
 		if err == nil {
-			fmt.Println("already connected")
-		} else {
-
 			mb.conn = conn
 			break
+		} else {
+			fmt.Println("Not connected", err)
+			time.Sleep(5 * time.Second)
 		}
 
 	}
 
 	return nil
 
-}
-
-// Disconnect disconnects from the message broker.
-func (mb *activemq) Disconnect() error {
-	if mb.conn == nil {
-		return fmt.Errorf("not connected")
-	}
-
-	fmt.Println("Disconnecting...")
-	err := mb.conn.Disconnect()
-	if err != nil {
-
-		mb.conn = nil
-	}
-	return nil
 }
 
 // Sends a message to a specified destination.
@@ -134,7 +122,6 @@ func (mb *activemq) Subscribe(destination string) {
 			mb.Connect()
 		}
 		time.Sleep(5 * time.Second)
-		fmt.Println("connected: inside subscribe")
 
 		var err error
 		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
@@ -148,9 +135,9 @@ func (mb *activemq) Subscribe(destination string) {
 	}
 }
 
-func (mb *activemq) Read(destination string) *stomp.Message {
+func (mb *activemq) Read(destination string) string {
 
-	messge, err := mb.subs.Read()
+	message, err := mb.subs.Read()
 	if err != nil {
 		fmt.Println("Error reading message: ", err)
 		mb.Connect()
@@ -158,6 +145,6 @@ func (mb *activemq) Read(destination string) *stomp.Message {
 
 	}
 
-	return messge
+	return string(message.Body)
 
 }
