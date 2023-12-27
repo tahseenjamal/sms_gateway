@@ -98,13 +98,13 @@ func (mb *activemq) Reconnect(destination string) {
 func (mb *activemq) Send(destination, body string) {
 	if mb.conn == nil {
 		fmt.Println("not connected")
-		mb.Reconnect()
+		mb.Reconnect(destination)
 	}
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
 		mb.FileLogger.WriteLog(fmt.Sprintf("Error sending to destination: %s", destination))
-		mb.Reconnect()
+		mb.Reconnect(destination)
 	}
 }
 
