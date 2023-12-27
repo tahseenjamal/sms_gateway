@@ -25,10 +25,10 @@ type activemqConfig struct {
 
 // activemq object for connecting to the message broker.
 type activemq struct {
-	conn   *stomp.Conn
-	config activemqConfig
-	logger *logger.FileLogger
-	subs   *stomp.Subscription
+	conn        *stomp.Conn
+	config      activemqConfig
+	fileloggger *logger.FileLogger
+	subs        *stomp.Subscription
 }
 
 func getConfig() activemqConfig {
@@ -49,9 +49,9 @@ func NewMessageBroker() *activemq {
 	activemqConfig := getConfig()
 
 	connection := &activemq{
-		conn:   nil,
-		config: activemqConfig,
-		logger: logger.GetLumberJack(),
+		conn:        nil,
+		config:      activemqConfig,
+		fileloggger: logger.GetLumberJack(),
 	}
 
 	connection.Connect()
@@ -60,10 +60,10 @@ func NewMessageBroker() *activemq {
 }
 
 // Connect connects to the message broker.
-func (mb *activemq) Connect() error {
+func (mb *activemq) Connect() {
 	if mb.conn != nil {
 		time.Sleep(5 * time.Second)
-		return fmt.Errorf("inside connection: already connected")
+		mb.fileloggger.WriteLog("inside connection: already connected")
 	}
 	options := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mb.config.username, mb.config.password),
@@ -75,7 +75,7 @@ func (mb *activemq) Connect() error {
 
 	if mb.conn != nil {
 		time.Sleep(5 * time.Second)
-		return fmt.Errorf("second check inside connection: already connected")
+		mb.fileloggger.WriteLog("second check inside connection: already connected")
 
 	}
 
@@ -84,6 +84,7 @@ func (mb *activemq) Connect() error {
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
 		if err == nil {
 			mb.conn = conn
+			mb.fileloggger.WriteLog("connected")
 			break
 		} else {
 			fmt.Println("Not connected", err)
@@ -92,23 +93,25 @@ func (mb *activemq) Connect() error {
 
 	}
 
-	return nil
+}
 
+func (mb *activemq) Reconnect() {
+	mb.conn.Disconnect()
+	mb.Connect()
 }
 
 // Sends a message to a specified destination.
-func (mb *activemq) Send(destination, body string) error {
+func (mb *activemq) Send(destination, body string) {
 	if mb.conn == nil {
 		fmt.Println("not connected")
-		mb.Connect()
+		mb.Reconnect()
 	}
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
-		fmt.Printf("cannot send to queue: %s\n", destination)
-		mb.Connect()
+		mb.fileloggger.WriteLog(fmt.Sprintf("Error sending to destination: %s", destination))
+		mb.Reconnect()
 	}
-	return nil
 }
 
 // Subscribe subscribes to a specified destination after checking if the connection is alive.
@@ -116,18 +119,14 @@ func (mb *activemq) Subscribe(destination string) {
 
 	for {
 
-		if mb.conn == nil {
-			time.Sleep(5 * time.Second)
-			fmt.Println("not connected: inside subscribe")
-			mb.Connect()
-		}
-		time.Sleep(5 * time.Second)
-
+		mb.fileloggger.WriteLog(fmt.Sprintf("Attempting to subscribe to destination: %s", destination))
 		var err error
 		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 
 		if err != nil {
-			fmt.Println("Error subscribing to destination: ", destination)
+			mb.fileloggger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
+			mb.Reconnect()
+			time.Sleep(1 * time.Second)
 		} else {
 
 			break
@@ -137,14 +136,20 @@ func (mb *activemq) Subscribe(destination string) {
 
 func (mb *activemq) Read(destination string) string {
 
-	message, err := mb.subs.Read()
-	if err != nil {
-		fmt.Println("Error reading message: ", err)
-		mb.Connect()
-		mb.Subscribe(destination)
+	var message *stomp.Message
+	var err error
+	for {
+		message, err = mb.subs.Read()
+		if err != nil {
+			fmt.Println("Error reading message: ", err)
+			mb.Reconnect()
+			mb.fileloggger.WriteLog(fmt.Sprintf("Subscribing again to destination: %s", destination))
+			mb.Subscribe(destination)
+		} else {
+			break
+		}
 
 	}
-
 	return string(message.Body)
 
 }
