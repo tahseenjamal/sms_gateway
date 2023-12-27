@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -10,6 +11,25 @@ import (
 	"github.com/go-stomp/stomp"
 	"github.com/magiconair/properties"
 )
+
+type unofficialStompConn struct {
+	Conn                     interface{}   `json:"conn"`
+	ReadCh                   chan string   `json:"readCh"`
+	WriteCh                  chan int      `json:"writeCh"`
+	Version                  float64       `json:"version"`
+	Session                  string        `json:"session"`
+	Server                   string        `json:"server"`
+	ReadTimeout              time.Duration `json:"readTimeout"`
+	WriteTimeout             time.Duration `json:"writeTimeout"`
+	MsgSendTimeout           time.Duration `json:"msgSendTimeout"`
+	RcvReceiptTimeout        time.Duration `json:"rcvReceiptTimeout"`
+	DisconnectReceiptTimeout time.Duration `json:"disconnectReceiptTimeout"`
+	HbGracePeriodMultiplier  float64       `json:"hbGracePeriodMultiplier"`
+	Closed                   bool          `json:"closed"`
+	CloseMutex               interface{}   `json:"closeMutex"`
+	Options                  interface{}   `json:"options"`
+	Log                      interface{}   `json:"log"`
+}
 
 // Mutex for synchronizing access to the connection.
 var mutex = &sync.Mutex{}
@@ -61,9 +81,7 @@ func NewMessageBroker() *activemq {
 
 // Connect connects to the message broker.
 func (mb *activemq) Connect() {
-	if mb.conn != nil {
-		time.Sleep(5 * time.Second)
-	}
+
 	options := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mb.config.username, mb.config.password),
 		stomp.ConnOpt.HeartBeat(mb.config.heartbeat, mb.config.heartbeatGrace),
@@ -72,16 +90,28 @@ func (mb *activemq) Connect() {
 	mutex.Lock()
 	defer mutex.Unlock()
 
+	var connectionInstance unofficialStompConn
+
+	if mb.conn != nil {
+		jsonData, _ := json.Marshal(mb.conn)
+		_ = json.Unmarshal([]byte(jsonData), &connectionInstance)
+		if connectionInstance.Closed {
+			mb.conn = nil
+
+		}
+	}
+
 	for {
 
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
 		if err == nil {
 			mb.conn = conn
+			fmt.Println("Connected", mb.conn)
 			mb.FileLogger.WriteLog("connected")
 			break
 		} else {
-			fmt.Println("Not connected", err)
-			time.Sleep(5 * time.Second)
+			fmt.Println("Not connected", err.Error())
+			time.Sleep(1 * time.Second)
 		}
 
 	}
@@ -90,10 +120,7 @@ func (mb *activemq) Connect() {
 
 func (mb *activemq) Reconnect(destination string) {
 
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	mb.conn.Disconnect()
+	fmt.Println("Reconnecting")
 	mb.Connect()
 	mb.Subscribe(destination)
 }
@@ -115,18 +142,13 @@ func (mb *activemq) Send(destination, body string) {
 // Subscribe subscribes to a specified destination after checking if the connection is alive.
 func (mb *activemq) Subscribe(destination string) {
 
-	for {
+	var err error
+	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
+	if err != nil {
+		mb.FileLogger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
+		go mb.Reconnect(destination)
+		time.Sleep(1 * time.Second)
 
-		var err error
-		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
-		if err != nil {
-			mb.FileLogger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
-			mb.Reconnect(destination)
-			time.Sleep(1 * time.Second)
-		} else {
-
-			break
-		}
 	}
 }
 
@@ -138,9 +160,11 @@ func (mb *activemq) Read(destination string) (string, error) {
 	message, err = mb.subs.Read()
 	if err != nil {
 		mb.FileLogger.WriteLog(fmt.Sprintf("Error reading destination: %s", err.Error()))
-		mb.Reconnect(destination)
+		go mb.Reconnect(destination)
+		return "", err
+	} else {
+		mb.FileLogger.WriteLog(fmt.Sprintf("Received message: %s", message.Body))
+		return string(message.Body), err
 	}
-
-	return string(message.Body), err
 
 }
