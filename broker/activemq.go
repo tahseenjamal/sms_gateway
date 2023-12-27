@@ -122,6 +122,7 @@ func (mb *activemq) Subscribe(destination string) {
 		mb.fileloggger.WriteLog(fmt.Sprintf("Attempting to subscribe to destination: %s", destination))
 		var err error
 		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
+		mb.fileloggger.WriteLog(fmt.Sprintf("Subscribe executed Successfully to destination: %s", destination))
 
 		if err != nil {
 			mb.fileloggger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
@@ -141,10 +142,11 @@ func (mb *activemq) Read(destination string) string {
 	for {
 		message, err = mb.subs.Read()
 		if err != nil {
-			fmt.Println("Error reading message: ", err)
+			mb.fileloggger.WriteLog(fmt.Sprintf("Error reading destination: %s", destination))
 			mb.Reconnect()
 			mb.fileloggger.WriteLog(fmt.Sprintf("Subscribing again to destination: %s", destination))
 			mb.Subscribe(destination)
+			mb.fileloggger.WriteLog("Back from subscription")
 		} else {
 			break
 		}
