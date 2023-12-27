@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sms_gateway/broker"
 	"time"
 )
@@ -13,8 +12,16 @@ func main() {
 	activemq.Subscribe("test_queue")
 	for {
 
+		var msg string
+		var err error
+
 		activemq.Send("test_queue", "test message")
-		fmt.Println(activemq.Read("test_queue"))
+		msg, err = activemq.Read("test_queue")
+		if err == nil {
+			activemq.FileLogger.WriteLog("Received message: %s", msg)
+		} else {
+			activemq.FileLogger.WriteLog("Error receiving message: %s", err)
+		}
 
 		time.Sleep(1 * time.Second)
 	}
