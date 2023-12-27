@@ -117,7 +117,7 @@ func (mb *activemq) Subscribe(destination string) {
 		mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 		if err != nil {
 			mb.FileLogger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
-			mb.Reconnect()
+			mb.Reconnect(destination)
 			time.Sleep(1 * time.Second)
 		} else {
 
