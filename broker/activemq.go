@@ -89,6 +89,10 @@ func (mb *activemq) Connect() {
 }
 
 func (mb *activemq) Reconnect(destination string) {
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	mb.conn.Disconnect()
 	mb.Connect()
 	mb.Subscribe(destination)
