@@ -48,13 +48,16 @@ func splitString(input string, delimiter string) (int, int) {
 }
 
 func init() {
+
+	prop := properties.MustLoadFile("main.properties", properties.UTF8)
+
 	pattern := `id:(\w+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(?i)(.+)`
 	re = regexp.MustCompile(pattern)
 
 	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("tps", 50))*time.Millisecond), 1)
 
-	morningHour, morningMinute := splitString(prop.GetString("morning", "9:00"), ":")
-	eveningHour, eveningMinute := splitString(prop.GetString("evening", "20:00"), ":")
+	morningHour, morningMinute := splitString(prop.GetString("smpp.morning", "9:00"), ":")
+	eveningHour, eveningMinute := splitString(prop.GetString("smpp.evening", "20:00"), ":")
 
 	// start and end time basis black hour, messages outside this time would be dropped
 	currentTime := time.Now()
@@ -91,13 +94,13 @@ func getConfig() smppConfig {
 	systemId := prop.GetString("smpp.systemId", "systemId")
 	password := prop.GetString("smpp.password", "password")
 	systemType := prop.GetString("smpp.systemType", "systemType")
-	window := prop.GetInt("smpp.window", 1)
+	window := prop.GetUint("smpp.window", 1)
 
 	return smppConfig{host, port, systemId, password, systemType, window}
 }
 
 // New smpp connection
-func New() *connection {
+func NewSmpp() *connection {
 
 	smppConn := &connection{
 		conn:   nil,
@@ -109,7 +112,7 @@ func New() *connection {
 	return smppConn
 }
 
-func (smppConn *connection) Connect() {
+func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 	smppConn.conn = &smpp.Transceiver{
 		Addr:       smppConn.config.host + ":" + strconv.Itoa(smppConn.config.port),
@@ -117,22 +120,20 @@ func (smppConn *connection) Connect() {
 		Passwd:     smppConn.config.password,
 		SystemType: smppConn.config.systemType,
 		//timeout:    10 * time.Second,
-		EnquireLink:        5 * time.Minute,
+		EnquireLink:        1 * time.Minute,
 		EnquireLinkTimeout: 10 * time.Second,
 		RespTimeout:        2 * time.Second,
-		BindInterval:       10 * time.Second,
-		Handler:            smppConn.Handler,
+		BindInterval:       30 * time.Second,
+		Handler:            smppConn.Receive,
 		RateLimiter:        rate_limiter,
 		WindowSize:         smppConn.config.window,
 	}
 
+	return smppConn.conn.Bind()
+
 }
 
 func (smppConn *connection) Send() {
-
-}
-
-func (smppConn *connection) Receive() {
 
 }
 
@@ -144,7 +145,7 @@ func (smppConn *connection) IsConnected() {
 
 }
 
-func (smppConn *connection) Handler(p pdu.Body) {
+func (smppConn *connection) Receive(p pdu.Body) {
 	switch p.Header().ID {
 	case pdu.DeliverSMID:
 		f := p.Fields()

@@ -7,6 +7,7 @@ require (
 	github.com/go-stomp/stomp v2.1.4+incompatible
 	github.com/magiconair/properties v1.8.7
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 )
 
 require (
