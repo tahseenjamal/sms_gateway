@@ -59,6 +59,9 @@ func init() {
 
 	prop := properties.MustLoadFile("main.properties", properties.UTF8)
 
+	// Initialize regex for parsing delivery receipt
+	// id:ID sub:SUB dlvrd:DLVRD submit date:SUBMIT done date:DONE stat:STAT err:ERR [Tt]ext:TEXT
+	// In case of ID, it is alphanumeric with - as delimiter
 	pattern := `id:([\w-]+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(.+)`
 	re = regexp.MustCompile(pattern)
 
