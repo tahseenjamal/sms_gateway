@@ -62,7 +62,7 @@ func init() {
 	pattern := `id:(\w+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(?i)(.+)`
 	re = regexp.MustCompile(pattern)
 
-	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("tps", 50))*time.Millisecond), 1)
+	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("smpp.tps", 50))*time.Millisecond), 1)
 
 	morningHour, morningMinute := splitString(prop.GetString("smpp.morning", "9:00"), ":")
 	eveningHour, eveningMinute := splitString(prop.GetString("smpp.evening", "20:00"), ":")
