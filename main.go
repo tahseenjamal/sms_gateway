@@ -34,21 +34,15 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	go func() {
-
 		for conn_instance := range conn {
 			fmt.Println("SMPP connection status:", conn_instance.Status().String())
 		}
-
 	}()
 
 	for {
-
 		err := smpp.Send("test", "919899334417", "Hello", "")
 		if err != nil {
 			fmt.Println("Error sending message:", err.Error())
 		}
-
-		time.Sleep(1 * time.Millisecond)
-
 	}
 }
