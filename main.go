@@ -32,6 +32,7 @@ func main() {
 
 	for conn_instance := range conn {
 		fmt.Println("SMPP connection status:", conn_instance.Status().String())
+		smpp.Send("test", "123455", "test", "false")
 	}
 
 }

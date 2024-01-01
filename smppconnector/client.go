@@ -145,8 +145,8 @@ func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 func (smppConn *connection) Send(sender string, dest string, message string, test string) {
 
-	if smppConn.IsBlackHour() {
-		fmt.Println("|BLACK_HOUR|%s|%s|%s|%s", sender, dest, message)
+	if test != "true" && smppConn.IsBlackHour() {
+		fmt.Printf("|BLACK_HOUR|%s|%s|%s\n", sender, dest, message)
 		return
 	}
 
@@ -154,18 +154,18 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 		sml, err := smppConn.submitLong(sender, dest, message)
 		if err == nil {
 			for _, sm := range sml {
-				fmt.Println("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+				fmt.Printf("|SUBMITTED|%s|%s|%s|%s\n", sender, dest, message, sm.RespID())
 			}
 		} else {
-			fmt.Println("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
+			fmt.Printf("|SMPP_ERROR|%s|%s|%s|%s\n", sender, dest, message, err.Error())
 		}
 	} else {
 		sm, err := smppConn.submitShort(sender, dest, message)
 
 		if err == nil {
-			fmt.Println("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+			fmt.Printf("|SUBMITTED|%s|%s|%s|%s\n", sender, dest, message, sm.RespID())
 		} else {
-			fmt.Println("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
+			fmt.Printf("|SMPP_ERROR|%s|%s|%s|%s\n", sender, dest, message, err.Error())
 		}
 	}
 
