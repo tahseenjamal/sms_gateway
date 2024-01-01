@@ -101,10 +101,10 @@ func getConfig() smppConfig {
 	password := prop.GetString("smpp.password", "password")
 	systemType := prop.GetString("smpp.systemType", "systemType")
 	window := prop.GetUint("smpp.window", 1)
-	srcTON := prop.GetUint("smpp.srcTON", 5)
-	srcNPI := prop.GetUint("smpp.srcNPI", 1)
-	dstTON := prop.GetUint("smpp.dstTON", 1)
-	dstNPI := prop.GetUint("smpp.dstNPI", 1)
+	srcTON := uint8(prop.GetUint("smpp.srcTON", 5))
+	srcNPI := uint8(prop.GetUint("smpp.srcNPI", 1))
+	dstTON := uint8(prop.GetUint("smpp.dstTON", 1))
+	dstNPI := uint8(prop.GetUint("smpp.dstNPI", 1))
 
 	return smppConfig{host, port, systemId, password, systemType, window, srcTON, srcNPI, dstTON, dstNPI}
 }
