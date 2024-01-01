@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/fiorix/go-smpp/smpp"
+	"github.com/fiorix/go-smpp/smpp/encoding"
 	"github.com/fiorix/go-smpp/smpp/pdu"
 	"github.com/fiorix/go-smpp/smpp/pdu/pdufield"
+	"github.com/fiorix/go-smpp/smpp/pdu/pdutext"
 	"github.com/magiconair/properties"
 	"golang.org/x/time/rate"
 )
@@ -30,6 +32,10 @@ type smppConfig struct {
 	password   string
 	systemType string
 	window     uint
+	srcTON     uint8
+	srcNPI     uint8
+	dstTON     uint8
+	dstNPI     uint8
 }
 
 type connection struct {
@@ -95,8 +101,12 @@ func getConfig() smppConfig {
 	password := prop.GetString("smpp.password", "password")
 	systemType := prop.GetString("smpp.systemType", "systemType")
 	window := prop.GetUint("smpp.window", 1)
+	srcTON := prop.GetUint("smpp.srcTON", 5)
+	srcNPI := prop.GetUint("smpp.srcNPI", 1)
+	dstTON := prop.GetUint("smpp.dstTON", 1)
+	dstNPI := prop.GetUint("smpp.dstNPI", 1)
 
-	return smppConfig{host, port, systemId, password, systemType, window}
+	return smppConfig{host, port, systemId, password, systemType, window, srcTON, srcNPI, dstTON, dstNPI}
 }
 
 // New smpp connection
@@ -133,11 +143,66 @@ func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 }
 
-func (smppConn *connection) Send() {
+func (smppConn *connection) Send(sender string, dest string, message string, test string) {
+
+	if smppConn.IsBlackHour() {
+		fmt.Println("|BLACK_HOUR|%s|%s|%s|%s", sender, dest, message)
+		return
+	}
+
+	if len(encoding.ValidateGSM7String(message)) > 0 || len(message) > 160 {
+		sml, err := smppConn.submitLong(sender, dest, message)
+		if err == nil {
+			for _, sm := range sml {
+				fmt.Println("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+			}
+		} else {
+			fmt.Println("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
+		}
+	} else {
+		sm, err := smppConn.submitShort(sender, dest, message)
+
+		if err == nil {
+			fmt.Println("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
+		} else {
+			fmt.Println("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
+		}
+	}
 
 }
 
-func (smppConn *connection) Reconnect() {
+func (smppConn *connection) submitShort(sender string, dest string, message string) (*smpp.ShortMessage, error) {
+	pduMessage := pdutext.Raw(message)
+	sm, err := smppConn.conn.Submit(&smpp.ShortMessage{
+		Src:           sender,
+		Dst:           dest,
+		Text:          pduMessage,
+		Register:      pdufield.FinalDeliveryReceipt,
+		SourceAddrTON: smppConn.config.srcTON,
+		SourceAddrNPI: smppConn.config.dstTON,
+		DestAddrTON:   smppConn.config.dstTON,
+		DestAddrNPI:   smppConn.config.dstTON,
+	})
+
+	return sm, err
+}
+
+func (smppConn *connection) submitLong(sender string, dest string, message string) ([]smpp.ShortMessage, error) {
+
+	pduMessage := pdutext.UCS2(message)
+	sml, err := smppConn.conn.SubmitLongMsg(&smpp.ShortMessage{
+		Src:           sender,
+		Dst:           dest,
+		Text:          pduMessage,
+		Register:      pdufield.FinalDeliveryReceipt,
+		SourceAddrTON: smppConn.config.srcTON,
+		SourceAddrNPI: smppConn.config.dstTON,
+		DestAddrTON:   smppConn.config.dstTON,
+		DestAddrNPI:   smppConn.config.dstTON,
+		ESMClass:      8,
+	})
+
+	return sml, err
 
 }
 
