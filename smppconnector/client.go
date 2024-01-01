@@ -59,7 +59,7 @@ func init() {
 
 	prop := properties.MustLoadFile("main.properties", properties.UTF8)
 
-	pattern := `id:(\w+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(?i)(.+)`
+	pattern := `id:([\w-]+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(.+)`
 	re = regexp.MustCompile(pattern)
 
 	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("smpp.tps", 50))*time.Millisecond), 1)
@@ -77,11 +77,10 @@ func init() {
 func extract(message string) (map[string]string, error) {
 
 	matches := re.FindStringSubmatch(message)
-
 	var resultMap = make(map[string]string)
 
 	if len(matches) > 0 {
-		keys := []string{"id", "sub", "dlvrd", "submit_date", "done_date", "stat", "err", "text"}
+		keys := []string{"id", "sub", "dlvrd", "submit date", "done date", "stat", "err", "text"}
 
 		for i, key := range keys {
 			resultMap[key] = matches[i+1]
@@ -222,7 +221,8 @@ func (smppConn *connection) Receive(p pdu.Body) {
 		text := f[pdufield.ShortMessage].String()
 		dlr, _ := extract(text)
 
-		fmt.Printf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s\n", src, dst, dlr["stat"], dlr["text"], dlr["id"])
+		smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", dst, src, dlr["stat"], dlr["text"], dlr["id"]))
+
 	}
 
 }
