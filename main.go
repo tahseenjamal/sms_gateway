@@ -44,5 +44,6 @@ func main() {
 		if err != nil {
 			fmt.Println("Error sending message:", err.Error())
 		}
+		time.Sleep(1 * time.Microsecond)
 	}
 }
