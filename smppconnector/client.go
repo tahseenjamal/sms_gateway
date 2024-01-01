@@ -3,6 +3,7 @@ package smppconnector
 import (
 	"fmt"
 	"regexp"
+	"sms_gateway/logger"
 	"strconv"
 	"strings"
 	"time"
@@ -40,8 +41,9 @@ type smppConfig struct {
 
 type connection struct {
 	// forix go smpp library
-	conn   *smpp.Transceiver
-	config smppConfig
+	conn       *smpp.Transceiver
+	FileLogger *logger.FileLogger
+	config     smppConfig
 }
 
 func splitString(input string, delimiter string) (int, int) {
@@ -113,11 +115,10 @@ func getConfig() smppConfig {
 func NewSmpp() *connection {
 
 	smppConn := &connection{
-		conn:   nil,
-		config: getConfig(),
+		conn:       nil,
+		config:     getConfig(),
+		FileLogger: logger.GetLumberJack(),
 	}
-
-	smppConn.Connect()
 
 	return smppConn
 }
@@ -125,15 +126,14 @@ func NewSmpp() *connection {
 func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 	smppConn.conn = &smpp.Transceiver{
-		Addr:       smppConn.config.host + ":" + strconv.Itoa(smppConn.config.port),
-		User:       smppConn.config.systemId,
-		Passwd:     smppConn.config.password,
-		SystemType: smppConn.config.systemType,
-		//timeout:    10 * time.Second,
+		Addr:               smppConn.config.host + ":" + strconv.Itoa(smppConn.config.port),
+		User:               smppConn.config.systemId,
+		Passwd:             smppConn.config.password,
+		SystemType:         smppConn.config.systemType,
 		EnquireLink:        1 * time.Minute,
 		EnquireLinkTimeout: 10 * time.Second,
 		RespTimeout:        2 * time.Second,
-		BindInterval:       30 * time.Second,
+		BindInterval:       1 * time.Second,
 		Handler:            smppConn.Receive,
 		RateLimiter:        rate_limiter,
 		WindowSize:         smppConn.config.window,
@@ -143,11 +143,11 @@ func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 }
 
-func (smppConn *connection) Send(sender string, dest string, message string, test string) {
+func (smppConn *connection) Send(sender string, dest string, message string, test string) error {
 
-	if test != "true" && smppConn.IsBlackHour() {
+	if test == "true" || smppConn.IsBlackHour() {
 		fmt.Printf("|BLACK_HOUR|%s|%s|%s\n", sender, dest, message)
-		return
+		return nil
 	}
 
 	if len(encoding.ValidateGSM7String(message)) > 0 || len(message) > 160 {
@@ -158,17 +158,20 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 			}
 		} else {
 			fmt.Printf("|SMPP_ERROR|%s|%s|%s|%s\n", sender, dest, message, err.Error())
+			return err
 		}
 	} else {
 		sm, err := smppConn.submitShort(sender, dest, message)
 
 		if err == nil {
-			fmt.Printf("|SUBMITTED|%s|%s|%s|%s\n", sender, dest, message, sm.RespID())
+			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID()))
 		} else {
-			fmt.Printf("|SMPP_ERROR|%s|%s|%s|%s\n", sender, dest, message, err.Error())
+			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error()))
+			return err
 		}
 	}
 
+	return nil
 }
 
 func (smppConn *connection) submitShort(sender string, dest string, message string) (*smpp.ShortMessage, error) {
@@ -219,7 +222,7 @@ func (smppConn *connection) Receive(p pdu.Body) {
 		text := f[pdufield.ShortMessage].String()
 		dlr, _ := extract(text)
 
-		fmt.Sprintf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", src, dst, dlr["stat"], dlr["text"], dlr["id"])
+		fmt.Printf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s\n", src, dst, dlr["stat"], dlr["text"], dlr["id"])
 	}
 
 }
