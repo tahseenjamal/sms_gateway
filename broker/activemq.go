@@ -32,7 +32,13 @@ type unofficialStompConn struct {
 }
 
 // Mutex for synchronizing access to the connection.
-var mutex = &sync.Mutex{}
+var (
+	mutex *sync.Mutex
+)
+
+const (
+	NULLSTRING = ""
+)
 
 // activemqConfig object for storing the configuration of the message broker.
 type activemqConfig struct {
@@ -49,6 +55,10 @@ type activemq struct {
 	config     activemqConfig
 	FileLogger *logger.FileLogger
 	subs       *stomp.Subscription
+}
+
+func init() {
+	mutex = &sync.Mutex{}
 }
 
 func getConfig() activemqConfig {
@@ -134,7 +144,7 @@ func (mb *activemq) Send(destination, body string) {
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
-		mb.FileLogger.WriteLog(fmt.Sprintf("Error sending to destination: %s", destination))
+		mb.FileLogger.WriteLog("Error sending to destination: %s", destination)
 		mb.Reconnect(destination)
 	}
 }
@@ -145,7 +155,7 @@ func (mb *activemq) Subscribe(destination string) {
 	var err error
 	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
-		mb.FileLogger.WriteLog(fmt.Sprintf("Error subscribing to destination: %s", destination))
+		mb.FileLogger.WriteLog("Error subscribing to destination: %s", destination)
 		go mb.Reconnect(destination)
 		time.Sleep(1 * time.Second)
 
@@ -159,11 +169,10 @@ func (mb *activemq) Read(destination string) (string, error) {
 	err = nil
 	message, err = mb.subs.Read()
 	if err != nil {
-		mb.FileLogger.WriteLog(fmt.Sprintf("Error reading destination: %s", err.Error()))
+		mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
 		go mb.Reconnect(destination)
-		return "", err
+		return NULLSTRING, err
 	} else {
-		mb.FileLogger.WriteLog(fmt.Sprintf("Received message: %s", message.Body))
 		return string(message.Body), err
 	}
 
