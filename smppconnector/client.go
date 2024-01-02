@@ -156,10 +156,11 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 		sml, err := smppConn.submitLong(sender, dest, message)
 		if err == nil {
 			for _, sm := range sml {
-				fmt.Printf("|SUBMITTED|%s|%s|%s|%s\n", sender, dest, message, sm.RespID())
+				smppConn.FileLogger.WriteLog(fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID()))
 			}
 		} else {
-			fmt.Printf("|SMPP_ERROR|%s|%s|%s|%s\n", sender, dest, message, err.Error())
+			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error()))
+			time.Sleep(1 * time.Second)
 			return err
 		}
 	} else {
@@ -169,6 +170,7 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID()))
 		} else {
 			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error()))
+			time.Sleep(1 * time.Second)
 			return err
 		}
 	}
