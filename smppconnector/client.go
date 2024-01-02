@@ -148,7 +148,7 @@ func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 func (smppConn *connection) Send(sender string, dest string, message string, test string) error {
 
 	if test == "true" || smppConn.IsBlackHour() {
-		fmt.Printf("|BLACK_HOUR|%s|%s|%s\n", sender, dest, message)
+		smppConn.FileLogger.WriteLog("|BLACK_HOUR|%s|%s|%s", sender, dest, message)
 		return nil
 	}
 
@@ -156,10 +156,10 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 		sml, err := smppConn.submitLong(sender, dest, message)
 		if err == nil {
 			for _, sm := range sml {
-				smppConn.FileLogger.WriteLog(fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID()))
+				smppConn.FileLogger.WriteLog("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
 			}
 		} else {
-			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error()))
+			smppConn.FileLogger.WriteLog("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
 			time.Sleep(1 * time.Second)
 			return err
 		}
@@ -167,9 +167,9 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 		sm, err := smppConn.submitShort(sender, dest, message)
 
 		if err == nil {
-			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID()))
+			smppConn.FileLogger.WriteLog("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
 		} else {
-			smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error()))
+			smppConn.FileLogger.WriteLog("|SMPP_ERROR|%s|%s|%s|%s", sender, dest, message, err.Error())
 			time.Sleep(1 * time.Second)
 			return err
 		}
@@ -213,10 +213,6 @@ func (smppConn *connection) submitLong(sender string, dest string, message strin
 
 }
 
-func (smppConn *connection) IsConnected() {
-
-}
-
 func (smppConn *connection) Receive(p pdu.Body) {
 	switch p.Header().ID {
 	case pdu.DeliverSMID:
@@ -226,7 +222,7 @@ func (smppConn *connection) Receive(p pdu.Body) {
 		text := f[pdufield.ShortMessage].String()
 		dlr, _ := extract(text)
 
-		smppConn.FileLogger.WriteLog(fmt.Sprintf("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", dst, src, dlr["stat"], dlr["text"], dlr["id"]))
+		smppConn.FileLogger.WriteLog("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", dst, src, dlr["stat"], dlr["text"], dlr["id"])
 
 	}
 
