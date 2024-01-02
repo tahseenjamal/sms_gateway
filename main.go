@@ -18,9 +18,7 @@ func main() {
 	// 	activemq.Send("test_queue", "test message")
 	// 	msg, err = activemq.Read("test_queue")
 	// 	if err == nil {
-	// 		activemq.FileLogger.WriteLog("Received message: " + msg)
-	// 	} else {
-	// 		activemq.FileLogger.WriteLog("Error reading message: " + err.Error())
+	// 		activemq.FileLogger.WriteLog("Received message: %s ", msg)
 	// 	}
 
 	// 	time.Sleep(1 * time.Second)
