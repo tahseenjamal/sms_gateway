@@ -59,8 +59,10 @@ func GetLumberJack() *FileLogger {
 	return fileLogger
 }
 
-func (l *FileLogger) WriteLog(data string) {
+func (l *FileLogger) WriteLog(template string, args ...interface{}) {
 
-	l.logger.Println(data)
+	template += "\n"
+
+	l.logger.Printf(template, args...)
 
 }
