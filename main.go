@@ -10,6 +10,7 @@ import (
 func main() {
 	// Initialize smpp
 	smpp := smppconnector.NewSmpp()
+	smpp.WithRateLimit(100)
 	smpp.Connect()
 
 	time.Sleep(1 * time.Second)
@@ -35,8 +36,6 @@ func main() {
 					time.Sleep(1 * time.Second)
 				}
 			}
-
-			time.Sleep(10 * time.Microsecond)
 		} else {
 			fmt.Println("Main: Error sending message: ", err.Error())
 			time.Sleep(1 * time.Second)
