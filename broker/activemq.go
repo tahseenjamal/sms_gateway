@@ -67,8 +67,8 @@ func getConfig() activemqConfig {
 	brokerURL := prop.GetString("activemq.broker.url", "localhost:61613")
 	username := prop.GetString("activemq.broker.username", "admin")
 	password := prop.GetString("activemq.broker.password", "admin")
-	heartbeat := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 10))
-	heartbeatGrace := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 10))
+	heartbeat := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 1))
+	heartbeatGrace := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 5))
 
 	return activemqConfig{brokerURL, username, password, heartbeat, heartbeatGrace}
 }
@@ -100,53 +100,63 @@ func (mb *activemq) Connect() {
 	mutex.Lock()
 	defer mutex.Unlock()
 
+	if mb.IsDisconnected() {
+
+		for {
+
+			conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
+			if err == nil {
+				mb.conn = conn
+				mb.FileLogger.WriteLog("connected")
+				time.Sleep(1 * time.Second)
+				break
+			} else {
+				fmt.Println("Broker Not connected", err.Error())
+				time.Sleep(1 * time.Second)
+			}
+
+		}
+	}
+}
+
+func (mb *activemq) IsDisconnected() bool {
+
 	var connectionInstance unofficialStompConn
 
 	if mb.conn != nil {
 		jsonData, _ := json.Marshal(mb.conn)
 		_ = json.Unmarshal([]byte(jsonData), &connectionInstance)
-		if connectionInstance.Closed {
-			mb.conn = nil
-
-		}
+		return connectionInstance.Closed
+	} else if mb.conn == nil {
+		return true
 	}
 
-	for {
-
-		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
-		if err == nil {
-			mb.conn = conn
-			fmt.Println("Connected", mb.conn)
-			mb.FileLogger.WriteLog("connected")
-			break
-		} else {
-			fmt.Println("Not connected", err.Error())
-			time.Sleep(1 * time.Second)
-		}
-
-	}
-
+	return false
 }
 
 func (mb *activemq) Reconnect(destination string) {
 
-	fmt.Println("Reconnecting")
-	mb.Connect()
-	mb.Subscribe(destination)
+	fmt.Println("Reconnect called", mb.IsDisconnected())
+	if mb.IsDisconnected() {
+		fmt.Println("Reconnecting")
+		mb.conn.Disconnect()
+		mb.Connect()
+		if destination != "" {
+			mb.Subscribe(destination)
+		}
+	}
 }
 
 // Sends a message to a specified destination.
-func (mb *activemq) Send(destination, body string) {
-	if mb.conn == nil {
-		fmt.Println("not connected")
-		mb.Reconnect(destination)
-	}
+func (mb *activemq) Send(destination, body string) error {
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
-		mb.FileLogger.WriteLog("Error sending to destination: %s", destination)
-		mb.Reconnect(destination)
+		mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to destination: %s", destination)
+		go mb.Reconnect("")
 	}
+
+	return err
 }
 
 // Subscribe subscribes to a specified destination after checking if the connection is alive.
@@ -155,10 +165,8 @@ func (mb *activemq) Subscribe(destination string) {
 	var err error
 	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
-		mb.FileLogger.WriteLog("Error subscribing to destination: %s", destination)
+		mb.FileLogger.WriteLog("|BROKER_ERROR|Error subscribing to destination: %s", destination)
 		go mb.Reconnect(destination)
-		time.Sleep(1 * time.Second)
-
 	}
 }
 
