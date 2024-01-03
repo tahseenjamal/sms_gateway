@@ -65,7 +65,7 @@ func init() {
 	pattern := `id:([\w-]+) sub:(\d+) dlvrd:(\d+) submit date:(\d+) done date:(\d+) stat:(\w+) err:(\d+) [Tt]ext:(.+)`
 	re = regexp.MustCompile(pattern)
 
-	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("smpp.tps", 50))*time.Millisecond), 1)
+	rate_limiter = rate.NewLimiter(rate.Every(time.Duration(1000/prop.GetUint("smpp.tps", 50))*2*time.Millisecond), 1)
 
 	morningHour, morningMinute := splitString(prop.GetString("smpp.morning", "9:00"), ":")
 	eveningHour, eveningMinute := splitString(prop.GetString("smpp.evening", "20:00"), ":")
@@ -155,7 +155,7 @@ func (smppConn *connection) Close() {
 
 func (smppConn *connection) WithRateLimit(tps int) {
 	smppConn.conn = smppConn.GetSMPPConfig()
-	smppConn.conn.RateLimiter = rate.NewLimiter(rate.Limit(tps), 1)
+	smppConn.conn.RateLimiter = rate.NewLimiter(rate.Limit(2*tps), 1)
 }
 
 func (smppConn *connection) Send(sender string, dest string, message string, test string) error {
