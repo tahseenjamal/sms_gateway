@@ -36,7 +36,7 @@ func main() {
 				}
 			}
 
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(10 * time.Microsecond)
 		} else {
 			fmt.Println("Main: Error sending message: ", err.Error())
 			time.Sleep(1 * time.Second)
