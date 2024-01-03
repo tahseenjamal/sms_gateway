@@ -155,7 +155,9 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 	if len(encoding.ValidateGSM7String(message)) > 0 || len(message) > 160 {
 		sml, err := smppConn.submitLong(sender, dest, message)
 		if err == nil {
-			for _, sm := range sml {
+			// Avoiding copy of mutex lock
+			for index := range sml {
+				sm := &sml[index]
 				smppConn.FileLogger.WriteLog("|SUBMITTED|%s|%s|%s|%s", sender, dest, message, sm.RespID())
 			}
 		} else {
