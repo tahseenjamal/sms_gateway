@@ -1,8 +1,6 @@
 package broker
 
 import (
-	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -67,7 +65,7 @@ func getConfig() activemqConfig {
 	brokerURL := prop.GetString("activemq.broker.url", "localhost:61613")
 	username := prop.GetString("activemq.broker.username", "admin")
 	password := prop.GetString("activemq.broker.password", "admin")
-	heartbeat := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat", 1))
+	heartbeat := time.Millisecond * time.Duration(prop.GetInt("activemq.broker.heartbeat", 500))
 	heartbeatGrace := time.Second * time.Duration(prop.GetInt("activemq.broker.heartbeat.grace", 5))
 
 	return activemqConfig{brokerURL, username, password, heartbeat, heartbeatGrace}
@@ -100,50 +98,28 @@ func (mb *activemq) Connect() {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	if mb.IsDisconnected() {
+	for {
 
-		for {
-
-			conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
-			if err == nil {
-				mb.conn = conn
-				mb.FileLogger.WriteLog("connected")
-				time.Sleep(1 * time.Second)
-				break
-			} else {
-				fmt.Println("Broker Not connected", err.Error())
-				time.Sleep(1 * time.Second)
-			}
-
+		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
+		if err == nil {
+			mb.conn = conn
+			mb.FileLogger.WriteLog("connected")
+			time.Sleep(1 * time.Second)
+			break
+		} else {
+			mb.FileLogger.WriteLog("Error connecting to broker: %s", err.Error())
+			time.Sleep(1 * time.Second)
 		}
+
 	}
-}
-
-func (mb *activemq) IsDisconnected() bool {
-
-	var connectionInstance unofficialStompConn
-
-	if mb.conn != nil {
-		jsonData, _ := json.Marshal(mb.conn)
-		_ = json.Unmarshal([]byte(jsonData), &connectionInstance)
-		return connectionInstance.Closed
-	} else if mb.conn == nil {
-		return true
-	}
-
-	return false
 }
 
 func (mb *activemq) Reconnect(destination string) {
 
-	fmt.Println("Reconnect called", mb.IsDisconnected())
-	if mb.IsDisconnected() {
-		fmt.Println("Reconnecting")
-		mb.conn.Disconnect()
-		mb.Connect()
-		if destination != "" {
-			mb.Subscribe(destination)
-		}
+	mb.conn.Disconnect()
+	mb.Connect()
+	if destination != "" {
+		mb.Subscribe(destination)
 	}
 }
 
