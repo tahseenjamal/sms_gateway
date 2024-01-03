@@ -10,7 +10,7 @@ import (
 func main() {
 	// Initialize smpp
 	smpp := smppconnector.NewSmpp()
-	smpp.WithRateLimit(100)
+	smpp.WithRateLimit(2000)
 	smpp.Connect()
 
 	time.Sleep(1 * time.Second)
