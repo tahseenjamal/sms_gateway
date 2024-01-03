@@ -10,25 +10,6 @@ import (
 	"github.com/magiconair/properties"
 )
 
-type unofficialStompConn struct {
-	Conn                     interface{}   `json:"conn"`
-	ReadCh                   chan string   `json:"readCh"`
-	WriteCh                  chan int      `json:"writeCh"`
-	Version                  float64       `json:"version"`
-	Session                  string        `json:"session"`
-	Server                   string        `json:"server"`
-	ReadTimeout              time.Duration `json:"readTimeout"`
-	WriteTimeout             time.Duration `json:"writeTimeout"`
-	MsgSendTimeout           time.Duration `json:"msgSendTimeout"`
-	RcvReceiptTimeout        time.Duration `json:"rcvReceiptTimeout"`
-	DisconnectReceiptTimeout time.Duration `json:"disconnectReceiptTimeout"`
-	HbGracePeriodMultiplier  float64       `json:"hbGracePeriodMultiplier"`
-	Closed                   bool          `json:"closed"`
-	CloseMutex               interface{}   `json:"closeMutex"`
-	Options                  interface{}   `json:"options"`
-	Log                      interface{}   `json:"log"`
-}
-
 // Mutex for synchronizing access to the connection.
 var (
 	mutex *sync.Mutex
@@ -129,7 +110,7 @@ func (mb *activemq) Send(destination, body string) error {
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
 		mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to destination: %s", destination)
-		go mb.Reconnect("")
+		mb.Reconnect("")
 	}
 
 	return err
@@ -142,7 +123,7 @@ func (mb *activemq) Subscribe(destination string) {
 	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
 		mb.FileLogger.WriteLog("|BROKER_ERROR|Error subscribing to destination: %s", destination)
-		go mb.Reconnect(destination)
+		mb.Reconnect(destination)
 	}
 }
 
@@ -150,14 +131,17 @@ func (mb *activemq) Read(destination string) (string, error) {
 
 	var message *stomp.Message
 	var err error
-	err = nil
-	message, err = mb.subs.Read()
-	if err != nil {
-		mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
-		go mb.Reconnect(destination)
-		return NULLSTRING, err
+	if mb.conn != nil {
+		message, err = mb.subs.Read()
+		if err != nil {
+			mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
+			mb.Reconnect(destination)
+			return NULLSTRING, err
+		} else {
+			return string(message.Body), err
+		}
 	} else {
-		return string(message.Body), err
+		return NULLSTRING, err
 	}
 
 }
