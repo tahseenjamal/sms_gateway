@@ -122,12 +122,13 @@ func NewSmpp() *connection {
 		FileLogger: logger.GetLumberJack(),
 	}
 
+	smppConn.conn = smppConn.GetSMPPConfig()
+
 	return smppConn
 }
 
-func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
-
-	smppConn.conn = &smpp.Transceiver{
+func (smppConn *connection) GetSMPPConfig() *smpp.Transceiver {
+	return &smpp.Transceiver{
 		Addr:               smppConn.config.host + ":" + strconv.Itoa(smppConn.config.port),
 		User:               smppConn.config.systemId,
 		Passwd:             smppConn.config.password,
@@ -140,9 +141,21 @@ func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 		RateLimiter:        rate_limiter,
 		WindowSize:         smppConn.config.window,
 	}
+}
+
+func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
 	return smppConn.conn.Bind()
+}
 
+func (smppConn *connection) Close() {
+	smppConn.conn.Close()
+
+}
+
+func (smppConn *connection) WithRateLimit(tps int) {
+	smppConn.conn = smppConn.GetSMPPConfig()
+	smppConn.conn.RateLimiter = rate.NewLimiter(rate.Limit(tps), 1)
 }
 
 func (smppConn *connection) Send(sender string, dest string, message string, test string) error {
