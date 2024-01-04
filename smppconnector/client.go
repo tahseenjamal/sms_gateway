@@ -44,6 +44,7 @@ type connection struct {
 	conn       *smpp.Transceiver
 	FileLogger *logger.FileLogger
 	config     smppConfig
+	status     <-chan smpp.ConnStatus
 }
 
 func splitString(input string, delimiter string) (int, int) {
@@ -143,9 +144,15 @@ func (smppConn *connection) GetSMPPConfig() *smpp.Transceiver {
 	}
 }
 
-func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
+// func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
 
-	return smppConn.conn.Bind()
+//		return smppConn.conn.Bind()
+//	}
+func (smppConn *connection) Connect() *connection {
+
+	smppConn.status = smppConn.conn.Bind()
+
+	return smppConn
 }
 
 func (smppConn *connection) Close() {
@@ -153,9 +160,11 @@ func (smppConn *connection) Close() {
 
 }
 
-func (smppConn *connection) WithRateLimit(tps int) {
+func (smppConn *connection) WithRateLimit(tps int) *connection {
 	smppConn.conn = smppConn.GetSMPPConfig()
 	smppConn.conn.RateLimiter = rate.NewLimiter(rate.Limit(2*tps), 1)
+
+	return smppConn
 }
 
 func (smppConn *connection) Send(sender string, dest string, message string, test string) error {
@@ -235,9 +244,14 @@ func (smppConn *connection) Receive(p pdu.Body) {
 		dst := f[pdufield.SourceAddr]
 		src := f[pdufield.DestinationAddr]
 		text := f[pdufield.ShortMessage].String()
-		dlr, _ := extract(text)
+		dlr, err := extract(text)
 
-		smppConn.FileLogger.WriteLog("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", dst, src, dlr["stat"], dlr["text"], dlr["id"])
+		if err == nil {
+			smppConn.FileLogger.WriteLog("|SMPP_RESPONSE|%s|+%s|%s|%s|%s", dst, src, dlr["stat"], dlr["text"], dlr["id"])
+		} else {
+
+			smppConn.FileLogger.WriteLog("|SMPP_RESPONSE|DLR_ERR|%s", err.Error())
+		}
 
 	}
 
