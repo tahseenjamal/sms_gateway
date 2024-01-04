@@ -144,10 +144,6 @@ func (smppConn *connection) GetSMPPConfig() *smpp.Transceiver {
 	}
 }
 
-// func (smppConn *connection) Connect() <-chan smpp.ConnStatus {
-
-//		return smppConn.conn.Bind()
-//	}
 func (smppConn *connection) Connect() *connection {
 
 	smppConn.status = smppConn.conn.Bind()
