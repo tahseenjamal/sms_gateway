@@ -9,9 +9,7 @@ import (
 
 func main() {
 	// Initialize smpp
-	smpp := smppconnector.NewSmpp()
-	smpp.WithRateLimit(2000)
-	smpp.Connect()
+	smpp := smppconnector.NewSmpp().WithRateLimit(2000).Connect()
 
 	time.Sleep(1 * time.Second)
 
