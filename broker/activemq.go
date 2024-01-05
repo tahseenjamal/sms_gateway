@@ -29,7 +29,7 @@ type activemqConfig struct {
 }
 
 // activemq object for connecting to the message broker.
-type activemq struct {
+type Activemq struct {
 	conn       *stomp.Conn
 	config     activemqConfig
 	FileLogger *logger.FileLogger
@@ -53,11 +53,11 @@ func getConfig() activemqConfig {
 }
 
 // NewMessageBroker creates a new instance of MessageBroker.
-func NewMessageBroker() *activemq {
+func NewMessageBroker() *Activemq {
 
 	activemqConfig := getConfig()
 
-	connection := &activemq{
+	connection := &Activemq{
 		conn:       nil,
 		config:     activemqConfig,
 		FileLogger: logger.GetLumberJack(),
@@ -69,7 +69,7 @@ func NewMessageBroker() *activemq {
 }
 
 // Connect connects to the message broker.
-func (mb *activemq) Connect() {
+func (mb *Activemq) Connect() {
 
 	options := []func(*stomp.Conn) error{
 		stomp.ConnOpt.Login(mb.config.username, mb.config.password),
@@ -95,7 +95,7 @@ func (mb *activemq) Connect() {
 	}
 }
 
-func (mb *activemq) Reconnect(destination string) {
+func (mb *Activemq) Reconnect(destination string) {
 
 	mb.conn.Disconnect()
 	mb.Connect()
@@ -105,7 +105,7 @@ func (mb *activemq) Reconnect(destination string) {
 }
 
 // Sends a message to a specified destination.
-func (mb *activemq) Send(destination, body string) error {
+func (mb *Activemq) Send(destination, body string) error {
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
@@ -117,7 +117,7 @@ func (mb *activemq) Send(destination, body string) error {
 }
 
 // Subscribe subscribes to a specified destination after checking if the connection is alive.
-func (mb *activemq) Subscribe(destination string) {
+func (mb *Activemq) Subscribe(destination string) {
 
 	var err error
 	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
@@ -127,7 +127,7 @@ func (mb *activemq) Subscribe(destination string) {
 	}
 }
 
-func (mb *activemq) Read(destination string) (string, error) {
+func (mb *Activemq) Read(destination string) (string, error) {
 
 	var message *stomp.Message
 	var err error
