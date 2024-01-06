@@ -76,9 +76,6 @@ func (mb *Activemq) Connect() {
 		stomp.ConnOpt.HeartBeat(mb.config.heartbeat, mb.config.heartbeatGrace),
 	}
 
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	for {
 
 		conn, err := stomp.Dial("tcp", mb.config.brokerURL, options...)
@@ -97,10 +94,21 @@ func (mb *Activemq) Connect() {
 
 func (mb *Activemq) Reconnect(destination string) {
 
-	mb.conn.Disconnect()
-	mb.Connect()
-	if destination != "" {
-		mb.Subscribe(destination)
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	if mb.conn != nil {
+		t, e := mb.conn.Subscribe("/queue/heartbeat", stomp.AckAuto)
+		if e != nil {
+
+			mb.conn.Disconnect()
+			mb.Connect()
+			if destination != "" {
+				mb.Subscribe(destination)
+			}
+		} else {
+			t.Unsubscribe()
+		}
 	}
 }
 
@@ -131,17 +139,12 @@ func (mb *Activemq) Read(destination string) (string, error) {
 
 	var message *stomp.Message
 	var err error
-	if mb.conn != nil {
-		message, err = mb.subs.Read()
-		if err != nil {
-			mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
-			mb.Reconnect(destination)
-			return NULLSTRING, err
-		} else {
-			return string(message.Body), err
-		}
-	} else {
+	message, err = mb.subs.Read()
+	if err != nil {
+		mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
+		mb.Reconnect(destination)
 		return NULLSTRING, err
 	}
+	return string(message.Body), err
 
 }
