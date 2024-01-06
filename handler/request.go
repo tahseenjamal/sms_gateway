@@ -45,10 +45,8 @@ func (h *RequestHandler) Request(w http.ResponseWriter, r *http.Request) {
 	decodedString, _ := url.PathUnescape(queryParametersURI)
 	queryParametersURI = url.PathEscape(decodedString)
 
-	go func() {
-		h.broker.Send("http_calls", queryParametersURI)
-		h.logger.WriteLog("|HTTP|%s", queryParametersURI)
-	}()
+	h.broker.Send("http_calls", queryParametersURI)
+	h.logger.WriteLog("|HTTP|%s", queryParametersURI)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("001 OK"))
