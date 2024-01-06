@@ -92,6 +92,8 @@ func (mb *Activemq) Connect() {
 	}
 }
 
+// Can also launch this separately as a goroutine to check if the connection is alive.
+// If not, it will reconnect. But if for any reasons the goroutine is killed, the connection status will not be checked.
 func (mb *Activemq) Reconnect(destination string) {
 
 	mutex.Lock()
