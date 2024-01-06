@@ -45,11 +45,25 @@ func (h *RequestHandler) Request(w http.ResponseWriter, r *http.Request) {
 	decodedString, _ := url.PathUnescape(queryParametersURI)
 	queryParametersURI = url.PathEscape(decodedString)
 
-	h.broker.Send("http_calls", queryParametersURI)
-	h.logger.WriteLog("|HTTP|%s", queryParametersURI)
+	if h.broker.ConnPointer() != nil {
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("001 OK"))
+		err := h.broker.Send("http_calls", queryParametersURI)
+		if err != nil {
+			h.logger.WriteLog("|HTTP|Failed: %s", queryParametersURI)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("001 OK"))
+		} else {
+
+			h.logger.WriteLog("|HTTP|Success: %s", queryParametersURI)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("001 OK"))
+		}
+	} else {
+
+		h.logger.WriteLog("|HTTP|Failed: %s", queryParametersURI)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("001 OK"))
+	}
 }
 
 func (h *RequestHandler) Listen() {
