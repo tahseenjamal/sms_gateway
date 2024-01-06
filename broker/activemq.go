@@ -119,7 +119,8 @@ func (mb *Activemq) Send(destination, body string) error {
 
 	err := mb.conn.Send(destination, "text/plain", []byte(body))
 	if err != nil {
-		mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to destination: %s", destination)
+		mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to: %s", destination)
+		time.Sleep(1 * time.Second)
 		mb.Reconnect("")
 	}
 
@@ -132,7 +133,8 @@ func (mb *Activemq) Subscribe(destination string) {
 	var err error
 	mb.subs, err = mb.conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
-		mb.FileLogger.WriteLog("|BROKER_ERROR|Error subscribing to destination: %s", destination)
+		mb.FileLogger.WriteLog("|BROKER_ERROR|Error subscribing to: %s", destination)
+		time.Sleep(1 * time.Second)
 		mb.Reconnect(destination)
 	}
 }
@@ -143,7 +145,8 @@ func (mb *Activemq) Read(destination string) (string, error) {
 	var err error
 	message, err = mb.subs.Read()
 	if err != nil {
-		mb.FileLogger.WriteLog("Error reading destination: %s", err.Error())
+		mb.FileLogger.WriteLog("Error reading from: %s", err.Error())
+		time.Sleep(1 * time.Second)
 		mb.Reconnect(destination)
 		return NULLSTRING, err
 	}
