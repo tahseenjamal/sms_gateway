@@ -25,8 +25,6 @@ func main() {
 
 		for {
 
-			// When the broker is restarted, this receiver is not able to auto reconnect.
-			// This has to be checked
 			msg, err = receiver.Read("http_calls")
 			if err == nil {
 
