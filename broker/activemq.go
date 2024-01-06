@@ -125,12 +125,18 @@ func (mb *Activemq) Reconnect() {
 // TODO - Message persist or not persist
 func (mb *Activemq) Send(destination, body string) error {
 
-	err := mb.conn.Send(destination, "text/plain", []byte(body))
-	if err != nil {
-		mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to: %s", destination)
+	if mb.ConnPointer() != nil {
+		err := mb.conn.Send(destination, "text/plain", []byte(body))
+		if err != nil {
+			mb.FileLogger.WriteLog("|BROKER_ERROR|Error sending to: %s", destination)
+			return err
+		} else {
+			return nil
+		}
+	} else {
+		return errors.New("broker not connected")
 	}
 
-	return err
 }
 
 // Subscribe subscribes to a specified destination after checking if the connection is alive.
