@@ -110,6 +110,7 @@ func getConfig() smppConfig {
 	srcNPI := uint8(prop.GetUint("smpp.srcNPI", 1))
 	dstTON := uint8(prop.GetUint("smpp.dstTON", 1))
 	dstNPI := uint8(prop.GetUint("smpp.dstNPI", 1))
+	prefixPlus := prop.GetBool("smpp.prefixPlus", true)
 
 	return smppConfig{host, port, systemId, password, systemType, window, srcTON, srcNPI, dstTON, dstNPI}
 }
@@ -168,6 +169,10 @@ func (smppConn *connection) Send(sender string, dest string, message string, tes
 	if test == "true" || smppConn.IsBlackHour() {
 		smppConn.FileLogger.WriteLog("|BLACK_HOUR|%s|%s|%s", sender, dest, message)
 		return nil
+	}
+
+	if smppConn.config.prefixPlus {
+		dest = "+" + dest
 	}
 
 	if len(encoding.ValidateGSM7String(message)) > 0 || len(message) > 160 {
